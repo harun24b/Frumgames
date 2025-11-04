@@ -39,6 +39,10 @@
     .modal-content p { margin: 0 0 20px 0; color: var(--primary-text-color); font-size: 16px; }
     .modal-content button { width: 100px; padding: 10px; margin: 0 auto; border: none; border-radius: 20px; font-weight: bold; cursor: pointer; background-color: var(--accent-color); color: #000; display: block; }
 </style>
+
+<!-- আপনার SDK এখানে যোগ করা হয়েছে -->
+<script src='//libtl.com/sdk.js' data-zone='10140813' data-sdk='show_10140813'></script>
+
 </head>
 <body>
 
@@ -373,18 +377,34 @@ function buyItem(itemName) {
     userRef.update(updates);
 }
 
-
+// পরিবর্তিত collectEggs ফাংশন
 function collectEggs(animalType) {
     const count = currentUserData.animals[animalType];
     const food = currentUserData.food[animalType];
+
     if (count > 0 && food >= count) {
-        const updates = {
-            [`/food/${animalType}`]: food - count,
-            [`/eggs/${animalType}`]: (currentUserData.eggs?.[animalType] || 0) + count,
-            [`/timers/${animalType}Egg`]: Date.now()
-        };
-        db.ref('users/' + auth.currentUser.uid).update(updates);
-        customAlert(`${count} টি ডিম সংগ্রহ করা হয়েছে!`);
+        // বিজ্ঞাপন দেখানোর কোড
+        show_10140813('pop').then(() => {
+            // ব্যবহারকারী বিজ্ঞাপনটি শেষ পর্যন্ত দেখলে এই কোডটি রান হবে
+            const eggsCollected = count * 2; // ডিম দ্বিগুণ করা হলো
+            const updates = {
+                [`/food/${animalType}`]: food - count,
+                [`/eggs/${animalType}`]: (currentUserData.eggs?.[animalType] || 0) + eggsCollected,
+                [`/timers/${animalType}Egg`]: Date.now()
+            };
+            db.ref('users/' + auth.currentUser.uid).update(updates);
+            customAlert(`বিজ্ঞাপন দেখার জন্য আপনি দ্বিগুণ (${eggsCollected} টি) ডিম পেয়েছেন!`);
+        }).catch(e => {
+            // বিজ্ঞাপন দেখতে কোনো সমস্যা হলে বা ব্যবহারকারী বন্ধ করে দিলে
+            const eggsCollected = count; // স্বাভাবিক ডিম সংগ্রহ
+            const updates = {
+                [`/food/${animalType}`]: food - count,
+                [`/eggs/${animalType}`]: (currentUserData.eggs?.[animalType] || 0) + eggsCollected,
+                [`/timers/${animalType}Egg`]: Date.now()
+            };
+            db.ref('users/' + auth.currentUser.uid).update(updates);
+            customAlert(`${eggsCollected} টি ডিম সংগ্রহ করা হয়েছে!`);
+        });
     } else {
         customAlert("ডিম সংগ্রহের জন্য যথেষ্ট খাবার নেই।");
     }
@@ -448,7 +468,7 @@ function showGameView(viewName) {
         document.getElementById('nav' + v.charAt(0).toUpperCase() + v.slice(1)).classList.remove('active');
     });
     document.getElementById(viewName + 'View').classList.remove('hide');
-    document.getElementById('nav' + viewName.charAt(0).toUpperCase() + v.slice(1)).classList.add('active');
+    document.getElementById('nav' + viewName.charAt(0).toUpperCase() + viewName.slice(1)).classList.add('active');
 }
 </script>
 </body>
