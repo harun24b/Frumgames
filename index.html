@@ -17,6 +17,7 @@
     .tab.active { color: var(--accent-color); border-color: var(--accent-color); }
     input, select { width: 90%; padding: 14px; margin: 8px 0; border-radius: 12px; border: none; background: rgba(255,255,255,0.1); color: white; font-size: 16px; font-family: var(--font-family); }
     button, .button { width: 90%; padding: 12px; margin: 8px auto; border: none; border-radius: 30px; font-weight: bold; cursor: pointer; background-color: var(--accent-color); color: #000; box-shadow: 0 0 15px var(--glow-color); text-align: center; text-decoration: none; display: block; }
+    button:disabled { background-color: rgba(128,128,128,0.2); color: #888; cursor: not-allowed; box-shadow: none; }
     #statusMsg { font-size: 14px; margin-top: 10px; color: var(--timer-color); }
     .game-header { text-align: center; margin-top: 20px; padding: 15px; background: var(--card-bg-color); border-radius: 20px; backdrop-filter: blur(8px); margin-bottom: 20px; }
     .game-header .stats { display: flex; justify-content: space-around; margin-top: 10px; }
@@ -33,7 +34,6 @@
     .nav-btn.active { background: var(--accent-color); color: #000; font-weight: bold; }
     .logout-btn { background: var(--danger-color); color: white; margin-top: 15px; }
     #nurseryList p { margin: 5px 0; }
-    /* Custom Modal Styles */
     .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); display: none; justify-content: center; align-items: center; z-index: 1000; }
     .modal-content { background: #1c1f2a; padding: 25px; border-radius: 15px; text-align: center; width: 80%; max-width: 350px; box-shadow: 0 0 20px rgba(250, 204, 21, 0.5); border: 1px solid var(--accent-color); }
     .modal-content p { margin: 0 0 20px 0; color: var(--primary-text-color); font-size: 16px; }
@@ -81,6 +81,15 @@
     <!-- Home View -->
     <div id="homeView">
         <a id="telegramLink" href="#" target="_blank" class="button hide" style="background-color: #2AABEE; color: white; margin-bottom: 15px;">টেলিগ্রাম চ্যানেলে যোগ দিন</a>
+        
+        <div id="adRewardView" class="card">
+            <div class="item-icon">📺</div>
+            <div class="item-title">বিজ্ঞাপন দেখুন</div>
+            <p class="info-text">বিজ্ঞাপন দেখে টাকা আয় করুন!</p>
+            <button id="watchAdBtn" onclick="watchAdForReward()">বিজ্ঞাপন দেখুন</button>
+            <p class="info-text"><span id="adTimer"></span></p>
+        </div>
+
         <div id="nurseryView" class="card">
             <div class="item-icon">🐣</div>
             <div class="item-title">ইনকিউবেটর</div>
@@ -250,7 +259,11 @@ function initializeNewUserData(userId, email) {
         eggs: { swan: 0, parrot: 0 },
         animals: { swan: 0, parrot: 0 },
         food: { swan: 0, parrot: 0 },
-        timers: { swanEgg: Date.now(), parrotEgg: Date.now() },
+        timers: { 
+            swanEgg: Date.now(), 
+            parrotEgg: Date.now(),
+            lastAdWatch: 0
+        },
         nursery: {}
     });
 }
@@ -282,6 +295,7 @@ function showGamePage() {
     gameInterval = setInterval(() => {
         eggLoop();
         checkNursery();
+        updateAdCooldownTimer();
     }, 1000);
 }
 
@@ -327,7 +341,8 @@ function eggLoop() {
     ['swan', 'parrot'].forEach(type => {
         const count = currentUserData.animals?.[type] || 0;
         const food = currentUserData.food?.[type] || 0;
-        const timeLeft = Math.max(0, (currentUserData.timers?.[type + 'Egg'] || 0) + (gameSettings.animals?.[type].boostedEggTime * 1000) - Date.now());
+        const eggTime = (gameSettings.animals?.[type]?.boostedEggTime || 3600) * 1000;
+        const timeLeft = Math.max(0, (currentUserData.timers?.[type + 'Egg'] || 0) + eggTime - Date.now());
         const canCollect = count > 0 && food >= count && timeLeft <= 0;
         document.getElementById(`collect${type.charAt(0).toUpperCase() + type.slice(1)}EggBtn`).disabled = !canCollect;
         document.getElementById(`${type}Timer`).textContent = canCollect ? "সংগ্রহ করুন!" : new Date(timeLeft).toISOString().substr(14, 5);
@@ -377,42 +392,25 @@ function buyItem(itemName) {
     userRef.update(updates);
 }
 
-// পরিবর্তিত collectEggs ফাংশন
 function collectEggs(animalType) {
     const count = currentUserData.animals[animalType];
     const food = currentUserData.food[animalType];
-
     if (count > 0 && food >= count) {
-        // বিজ্ঞাপন দেখানোর কোড
-        show_10140813('pop').then(() => {
-            // ব্যবহারকারী বিজ্ঞাপনটি শেষ পর্যন্ত দেখলে এই কোডটি রান হবে
-            const eggsCollected = count * 2; // ডিম দ্বিগুণ করা হলো
-            const updates = {
-                [`/food/${animalType}`]: food - count,
-                [`/eggs/${animalType}`]: (currentUserData.eggs?.[animalType] || 0) + eggsCollected,
-                [`/timers/${animalType}Egg`]: Date.now()
-            };
-            db.ref('users/' + auth.currentUser.uid).update(updates);
-            customAlert(`বিজ্ঞাপন দেখার জন্য আপনি দ্বিগুণ (${eggsCollected} টি) ডিম পেয়েছেন!`);
-        }).catch(e => {
-            // বিজ্ঞাপন দেখতে কোনো সমস্যা হলে বা ব্যবহারকারী বন্ধ করে দিলে
-            const eggsCollected = count; // স্বাভাবিক ডিম সংগ্রহ
-            const updates = {
-                [`/food/${animalType}`]: food - count,
-                [`/eggs/${animalType}`]: (currentUserData.eggs?.[animalType] || 0) + eggsCollected,
-                [`/timers/${animalType}Egg`]: Date.now()
-            };
-            db.ref('users/' + auth.currentUser.uid).update(updates);
-            customAlert(`${eggsCollected} টি ডিম সংগ্রহ করা হয়েছে!`);
-        });
+        const updates = {
+            [`/food/${animalType}`]: food - count,
+            [`/eggs/${animalType}`]: (currentUserData.eggs?.[animalType] || 0) + count,
+            [`/timers/${animalType}Egg`]: Date.now()
+        };
+        db.ref('users/' + auth.currentUser.uid).update(updates);
+        customAlert(`${count} টি ডিম সংগ্রহ করা হয়েছে!`);
     } else {
         customAlert("ডিম সংগ্রহের জন্য যথেষ্ট খাবার নেই।");
     }
 }
 
 function sellAllEggs() {
-    const swanEarnings = (currentUserData.eggs?.swan || 0) * gameSettings.animals.swan.eggValue;
-    const parrotEarnings = (currentUserData.eggs?.parrot || 0) * gameSettings.animals.parrot.eggValue;
+    const swanEarnings = (currentUserData.eggs?.swan || 0) * (gameSettings.animals.swan.eggValue || 0);
+    const parrotEarnings = (currentUserData.eggs?.parrot || 0) * (gameSettings.animals.parrot.eggValue || 0);
     const totalEarnings = swanEarnings + parrotEarnings;
 
     if (totalEarnings > 0) {
@@ -458,7 +456,6 @@ function requestCashOut() {
         showGameView('home');
     }).catch(error => {
         customAlert("একটি সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।");
-        console.error("Cashout error: ", error);
     });
 }
 
@@ -469,6 +466,54 @@ function showGameView(viewName) {
     });
     document.getElementById(viewName + 'View').classList.remove('hide');
     document.getElementById('nav' + viewName.charAt(0).toUpperCase() + viewName.slice(1)).classList.add('active');
+}
+
+function updateAdCooldownTimer() {
+    if (!currentUserData || !gameSettings.rewards) return;
+
+    const adBtn = document.getElementById('watchAdBtn');
+    const adTimerSpan = document.getElementById('adTimer');
+    
+    const cooldown = (gameSettings.rewards.adCooldownSeconds || 300) * 1000;
+    const lastWatch = currentUserData.timers?.lastAdWatch || 0;
+    const nextAdTime = lastWatch + cooldown;
+    const timeLeft = Math.max(0, nextAdTime - Date.now());
+
+    if (timeLeft > 0) {
+        adBtn.disabled = true;
+        const minutes = Math.floor(timeLeft / 60000);
+        const seconds = Math.floor((timeLeft % 60000) / 1000);
+        adTimerSpan.textContent = `পরবর্তী বিজ্ঞাপন: ${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    } else {
+        adBtn.disabled = false;
+        adTimerSpan.textContent = "এখন বিজ্ঞাপন দেখতে পারবেন!";
+    }
+}
+
+function watchAdForReward() {
+    const cooldown = (gameSettings.rewards.adCooldownSeconds || 300) * 1000;
+    const lastWatch = currentUserData.timers?.lastAdWatch || 0;
+    if (Date.now() < lastWatch + cooldown) {
+        customAlert("দয়া করে পরবর্তী বিজ্ঞাপনের জন্য অপেক্ষা করুন।");
+        return;
+    }
+
+    show_10140813('pop').then(() => {
+        const rewardAmount = gameSettings.rewards.adRewardAmount || 50;
+        const userRef = db.ref('users/' + auth.currentUser.uid);
+        
+        const updates = {
+            'money': currentUserData.money + rewardAmount,
+            'timers/lastAdWatch': Date.now()
+        };
+
+        userRef.update(updates).then(() => {
+            customAlert(`অভিনন্দন! আপনি ${rewardAmount} টাকা পেয়েছেন!`);
+        });
+
+    }).catch(e => {
+        customAlert("বিজ্ঞাপন দেখাতে একটি সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।");
+    });
 }
 </script>
 </body>
